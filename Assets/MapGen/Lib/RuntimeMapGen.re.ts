@@ -3116,12 +3116,11 @@ public async generateFoliageInstances(group: THREE.Group, geometry: THREE.Buffer
                             uniform float uVerticalSwayFrequency; // Frequency of vertical movement
                             uniform float uGustPower; // Shapes the gust curve (lower = smoother peaks)
             
-                            // Hash and noise functions (standard implementations)
+                            // Hash and noise functions
                             vec3 hash3(vec3 p) {
-                                p = vec3(dot(p, vec3(127.1, 311.7, 74.7)),
-                                         dot(p, vec3(269.5, 183.3, 246.1)),
-                                         dot(p, vec3(113.5, 271.9, 124.6)));
-                                return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+                                p = fract(p * 0.1031);
+                                p += dot(p, p.yzx + 33.33);
+                                return fract((p.xxy + p.yzz) * p.zyx) * 2.0 - 1.0;
                             }
             
                             float noise2D(vec2 p) {
@@ -3157,29 +3156,30 @@ public async generateFoliageInstances(group: THREE.Group, geometry: THREE.Buffer
                                 float height = max(0.0, pos.y - uGlobalBendGroundLevel);
                                 // Apply height influence: higher values for uGlobalBendHeightInfluence
                                 // make the effect stronger at the top, creating a smoother bend curve.
-                                float hInfluence = pow(height, uGlobalBendHeightInfluence);
+                                float hInfluence = min(pow(height, uGlobalBendHeightInfluence), 50.0);
             
-                                // Calculate coordinates for noise sampling, incorporating time and frequency
-                                vec2 coord = pos.xz * uGlobalBendFrequency + uTime * uGlobalBendSpeed;
+                                float wrappedTime = mod(uTime, 1000.0);
+                                vec2 coord = pos.xz * uGlobalBendFrequency + wrappedTime * uGlobalBendSpeed;
             
                                 // Base wind using FBM for complex, natural-looking motion
                                 float baseWind = fbm(coord);
             
                                 // Gust component: uses a smooth sine wave shaped by gustPower
                                 // Lower uGustPower results in smoother, broader gusts
-                                float gust = sin(uTime * uGustFrequency + length(coord)) * 0.5 + 0.5;
-                                gust = pow(gust, uGustPower) * uGustStrength;
+                                float gustBase = sin(wrappedTime * uGustFrequency + length(coord)) * 0.5 + 0.5;
+                                float gust = pow(max(gustBase, 0.001), max(uGustPower, 0.001)) * uGustStrength;
             
                                 // Determine wind direction based on noise
                                 float nx = noise2D(coord + baseWind);
                                 float nz = noise2D(coord - baseWind);
-                                // Normalize the direction vector, adding a small value to prevent division by zero
-                                vec2 wind2D = normalize(vec2(nx, nz) + 0.0001);
+                                vec2 rawWind = vec2(nx, nz);
+                                float windLen = length(rawWind);
+                                vec2 wind2D = windLen > 0.001 ? rawWind / windLen : vec2(1.0, 0.0);
                                 vec3 windDir = vec3(wind2D.x, 0.0, wind2D.y);
             
                                 // Vertical sway for added realism, influenced by height
                                 // Adjust uVerticalSwayAmplitude and uVerticalSwayFrequency for desired vertical motion
-                                float vert = sin((pos.y * uVerticalSwayFrequency + uTime) * uVerticalSwayFrequency) * uVerticalSwayAmplitude;
+                                float vert = sin((pos.y * uVerticalSwayFrequency + wrappedTime) * uVerticalSwayFrequency) * uVerticalSwayAmplitude;
             
             
                                 // Final displacement calculation
