@@ -2921,7 +2921,8 @@ public async generateFoliageInstances(group: THREE.Group, geometry: THREE.Buffer
                     const materialsToUse: THREE.Material[] = [];
 
                     originalMaterials.forEach(originalMaterial => {
-                        if (windEnabledForGroup === true) {
+                        const isLeaf = /leaf|leaves/i.test(originalMaterial.name);
+                        if (windEnabledForGroup === true && isLeaf) {
                             const windMaterial = this.applyWindShader(originalMaterial);
                             materialsToUse.push(windMaterial);
                         } else {
